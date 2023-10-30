@@ -1,8 +1,15 @@
 {
-    "optim":{
-        ...
+    "_comment": "In this example, the optimization algorithm is set to use a learning rate of 0.01 and a momentum of 0.9. The RNN model is set to have an input size of 18 (corresponding to the length of the one-hotted input sequence), a hidden size of 128, an output size of 17 (corresponding to the length of the one-hotted output sequence), one layer, and a dropout rate of 0.2. You can adjust these hyperparameters as needed to improve the performance of the RNN model.",
+    
+    "optim": {
+        "lr": 0.01,
+        "momentum": 0.9
     },
-    "model":{
-        ...
+    "model": {
+        "input_size": 18,
+        "hidden_size": 128,
+        "output_size": 17,
+        "num_layers": 1,
+        "dropout": 0.2
     }
 }
