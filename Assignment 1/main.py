@@ -117,7 +117,7 @@ for epoch in range(num_epochs):
         input_tensor = torch.tensor([int(digit) for digit in a+b+"0"]).view(-1, 1, input_size)
         target_tensor = torch.tensor([int(digit) for digit in "0"+c]).view(-1)
 
-        output, loss = train(rnn, input_tensor, target_tensor, criterion, optimizer)
+        output, loss = train(rnn, input_tensor, target_tensor, criterion, optimizer, momentum)
 
     if epoch % 100 == 0:
         print(f"Epoch {epoch}: loss = {loss:.4f}")
