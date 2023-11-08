@@ -28,63 +28,81 @@ def generate_dataset(train_size, test_size, seed):
     return train_set, test_set
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Trains an RNN to perform multiplication of binary integers A * B = C")
+    parser = argparse.ArgumentParser(description="Assignment 1: Trains an RNN to perform multiplication of binary integers A * B = C")
     parser.add_argument("--train-size", type=int, default=10000, help="size of the generated training set")
     parser.add_argument("--test-size", type=int, default=1000, help="size of the generated test set")
     parser.add_argument("--seed", type=int, default=1234, help="random seed used for creating the datasets")
+    parser.add_argument("--param", help="path to the json file containing the hyperparameters")
     args = parser.parse_args()
 
     train_set, test_set = generate_dataset(args.train_size, args.test_size, args.seed)
 
-    print("Training set:")
+    '''print("Training set:")
     for a, b, c in train_set:
         print(f"{a} * {b} = {c}")
     print("Test set:")
     for a, b, c in test_set:
-        print(f"{a} * {b} = {c}")
+        print(f"{a} * {b} = {c}")'''
 
  
 # Define the RNN model
 class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
+    def __init__(self, input_size, hidden_size, output_size, num_layers, dropout):
         super(RNN, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        self.dropout = nn.Dropout(dropout)
         self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
-        self.i2o = nn.Linear(input_size + hidden_size, output_size)
+        self.i2o = nn.Linear(hidden_size, output_size)
         self.softmax = nn.LogSoftmax(dim=1)
+        #self.sigmoid = nn.Sigmoid()
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
 
     def forward(self, input, hidden):
         output, hidden = self.rnn(input, hidden)
         output = self.dropout(output)
         output = self.i2o(output)
+        #output = self.sigmoid(output)
         output = self.softmax(output)
         return output, hidden
 
     def initHidden(self):
-        return torch.zeros(self.num_layers, batch_size, self.hidden_size)
+        return torch.zeros(self.num_layers, 1, self.hidden_size)
 
 # Define the training function
 def train(rnn, input_tensor, target_tensor, criterion, optimizer):
-    hidden = rnn.initHidden(input_tensor.size(0))
+    hidden = rnn.initHidden()
     optimizer.zero_grad()
-    loss = 0
+    #loss = 0
 
-    for i in range(input_tensor.size(1)):
+    '''for i in range(input_tensor.size(1)):
         output, hidden = rnn(input_tensor[:, i, :], hidden)
-        loss += criterion(output.squeeze(), target_tensor[i])
+        #print("output.shape:", output.shape)  # Should be [1, num_classes]
+        #print("target_tensor[i].unsqueeze(0).shape:", target_tensor[i].unsqueeze(0).shape)  # Should be [1]
+        loss += criterion(output, target_tensor[i].unsqueeze(0))'''
+    output, hidden = rnn(input_tensor, hidden)
+    
+    print(f"Input tensor batch size: {input_tensor.size(0)}")
+    print(f"Output tensor batch size: {output.size(0)}")
+    print(f"Target tensor batch size: {target_tensor.size(0)}")
+    
+    output = output.view(output_size, 1)  # Reshape output to (N, C)
+    target_tensor = target_tensor.view(-1)  # Reshape target_tensor to (N)
+    print(f"Output tensor batch size: {output.size(0)}")
+    print(f"Target tensor batch size: {target_tensor.size(0)}")
+    loss = criterion(output, target_tensor)
 
     loss.backward()
-    optimizer.step(momentum=momentum)
+
+    optimizer.step()
 
     return output, loss.item() / input_tensor.size(1)
 
 # Generate the dataset
-train_set, test_set = generate_dataset(train_size=10000, test_size=1000, seed=1234)
+train_set, test_set = generate_dataset(train_size=1000, test_size=100, seed=1234)
 
 # Load Hyperparameters from json file
-with open("param.json", "r") as f:
+with open(args.param, "r") as f:
     hyperparams = json.load(f)
 
 # Access the hyperparameters for the optimization algorithm
@@ -97,45 +115,74 @@ hidden_size = hyperparams["model"]["hidden_size"]
 output_size = hyperparams["model"]["output_size"]
 num_layers = hyperparams["model"]["num_layers"]
 dropout = hyperparams["model"]["dropout"]
+num_epochs = hyperparams["model"]["num_epochs"]
 
-'''
-input_size = 18
-hidden_size = 128
-output_size = 17
-learning_rate = 0.01
-num_epochs = 1000
-'''
 
 # Initialize the RNN model, loss function, and optimizer
 rnn = RNN(input_size, hidden_size, output_size, num_layers, dropout)
-criterion = nn.NLLLoss()
+criterion = nn.CrossEntropyLoss()
+#criterion = nn.NLLLoss()
+#criterion = nn.BCELoss()
 optimizer = optim.SGD(rnn.parameters(), lr=learning_rate, momentum=momentum)
+
 
 # Train the RNN model
 for epoch in range(num_epochs):
     for a, b, c in train_set:
-        input_tensor = torch.tensor([int(digit) for digit in a+b+"0"]).view(-1, 1, input_size)
-        target_tensor = torch.tensor([int(digit) for digit in "0"+c]).view(-1)
+        input_tensor = torch.tensor([int(digit) for digit in (a+b).ljust(input_size, "0")]).float().view(1, -1, input_size)
+        target_data = [int(digit) for digit in c.ljust(output_size, "0")]
+        target_tensor = torch.tensor(target_data, dtype=torch.long).view(1, -1)
 
-        output, loss = train(rnn, input_tensor, target_tensor, criterion, optimizer, momentum)
+        output, loss = train(rnn, input_tensor, target_tensor, criterion, optimizer)
 
-    if epoch % 100 == 0:
-        print(f"Epoch {epoch}: loss = {loss:.4f}")
+    if epoch % 10 == 0:
+        print(f"Epoch {epoch}: loss = {loss:.4e}")
 
 # Evaluate the RNN model on the test set
 total_loss = 0
 with torch.no_grad():
     for a, b, c in test_set:
-        input_tensor = torch.tensor([int(digit) for digit in a+b+"0"]).view(-1, 1, input_size)
-        target_tensor = torch.tensor([int(digit) for digit in "0"+c]).view(-1)
+        input_data = [int(digit) for digit in (a+b).ljust(input_size, "0")]
+        input_tensor = torch.tensor(input_data, dtype=torch.float32).view(1, -1, input_size)
+        target_data = [int(digit) for digit in c.ljust(output_size, "0")]
+        target_tensor = torch.tensor(target_data, dtype=torch.long).view(-1, 1)
 
         hidden = rnn.initHidden()
-        loss = 0
 
-        for i in range(input_tensor.size()[0]):
-            output, hidden = rnn(input_tensor[i], hidden)
-            loss += criterion(output, target_tensor[i])
+        '''loss = 0
+        output_sequence = []
 
-        total_loss += loss.item() / input_tensor.size()[0]
+        #print(input_tensor.size(0), input_tensor.size(1), input_tensor.size(2))
+        for i in range(input_tensor.size(1)):
+            output, hidden = rnn(input_tensor[:, i, :], hidden)
+            print(output)
+            predicted_digit = output.argmax(dim=1).item()
+            print(predicted_digit)
+            binary_representation = bin(predicted_digit)[2:]  # Convert to binary and remove '0b'
+            output_sequence.append(binary_representation)
+            loss += criterion(output, target_tensor[i].unsqueeze(0))
+        '''
+
+        output, hidden = rnn(input_tensor, hidden)
+        output_sequence = output.argmax(dim=2).squeeze().tolist()
+        loss = criterion(output.view(-1, output_size), target_tensor)
+
+
+        # Print out the test data and the expected and resulting output
+        print(f"Test data: {a}, {b}, {c}")
+        print(f"Expected output: {target_tensor.tolist()}")
+        print(f"Resulting output: {output_sequence}")
+
+        '''output, hidden = rnn(input_tensor, hidden)
+        output_sequence = output.argmax(dim=2).squeeze().tolist()
+        
+        loss = criterion(output.view(-1, output_size), target_tensor)
+
+        # Print out the test data and the expected and resulting output
+        print(f"Test data: {a}, {b}, {c}")
+        print(f"Expected output: {target_tensor.tolist()}")
+        print(f"Resulting output: {output_sequence}")
+        total_loss += loss.item() / input_tensor.size()[0]'''
+
 
 print(f"Test loss: {total_loss / len(test_set):.4f}")

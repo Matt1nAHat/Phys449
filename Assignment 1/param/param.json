@@ -11,6 +11,6 @@
         "output_size": 17,
         "num_layers": 1,
         "dropout": 0,
-        "num_epochs": 100
+        "num_epochs": 5
     }
 }
