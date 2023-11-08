@@ -54,16 +54,26 @@ class RNN(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
         self.i2o = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.LogSoftmax(dim=1)
-        #self.sigmoid = nn.Sigmoid()
+        #self.softmax = nn.LogSoftmax(dim=1)
+        self.fc = nn.Linear(hidden_size, output_size)
+        self.sigmoid = nn.Sigmoid()
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
 
     def forward(self, input, hidden):
+        # Reshape the input to (batch_size, sequence_length, input_size)
+        input = input.view(1, 1, -1)
+        # Forward propagate the RNN
         output, hidden = self.rnn(input, hidden)
-        output = self.dropout(output)
-        output = self.i2o(output)
-        #output = self.sigmoid(output)
-        output = self.softmax(output)
+        output = self.fc(output)
+
+        #hidden = self.i2h(combined)
+        #output = self.i2o(hidden)
+
+        # Pass the output through the sigmoid activation function
+        output = self.sigmoid(output)
+
+        #output = self.dropout(output)
+        #output = self.softmax(output)
         return output, hidden
 
     def initHidden(self):
@@ -73,15 +83,21 @@ class RNN(nn.Module):
 def train(rnn, input_tensor, target_tensor, criterion, optimizer):
     hidden = rnn.initHidden()
     optimizer.zero_grad()
-    #loss = 0
+    loss = 0
 
-    '''for i in range(input_tensor.size(1)):
+    '''
+    "Working" model that only predicts 0 
+
+    for i in range(input_tensor.size(1)):
         output, hidden = rnn(input_tensor[:, i, :], hidden)
         #print("output.shape:", output.shape)  # Should be [1, num_classes]
         #print("target_tensor[i].unsqueeze(0).shape:", target_tensor[i].unsqueeze(0).shape)  # Should be [1]
         loss += criterion(output, target_tensor[i].unsqueeze(0))'''
-    output, hidden = rnn(input_tensor, hidden)
     
+    '''
+    Model with batch size mismatch error, cannot get working
+
+    output, hidden = rnn(input_tensor, hidden)
     print(f"Input tensor batch size: {input_tensor.size(0)}")
     print(f"Output tensor batch size: {output.size(0)}")
     print(f"Target tensor batch size: {target_tensor.size(0)}")
@@ -90,8 +106,23 @@ def train(rnn, input_tensor, target_tensor, criterion, optimizer):
     target_tensor = target_tensor.view(-1)  # Reshape target_tensor to (N)
     print(f"Output tensor batch size: {output.size(0)}")
     print(f"Target tensor batch size: {target_tensor.size(0)}")
-    loss = criterion(output, target_tensor)
+    loss = criterion(output, target_tensor)'''
 
+    outputs = [] 
+
+    for i in range(input_tensor.size(0)):
+        output, hidden = rnn(input_tensor[i], hidden)
+        #print(output[0])
+        #print(target_tensor)
+        loss += criterion(output[0], target_tensor)
+        #output = output.repeat(input_size, 1, 1)
+        #target = target_tensor[i].unsqueeze(1).repeat(1, 1, output.size(2))
+        #target = target.permute(1, 0, 2)
+        #print(output)
+        #print(target_tensor)
+        #print(target)
+        
+    #exit()
     loss.backward()
 
     optimizer.step()
@@ -120,33 +151,50 @@ num_epochs = hyperparams["model"]["num_epochs"]
 
 # Initialize the RNN model, loss function, and optimizer
 rnn = RNN(input_size, hidden_size, output_size, num_layers, dropout)
-criterion = nn.CrossEntropyLoss()
+#criterion = nn.CrossEntropyLoss()
+#criterion = nn.BCEWithLogitsLoss()
 #criterion = nn.NLLLoss()
-#criterion = nn.BCELoss()
+criterion = nn.BCELoss()
 optimizer = optim.SGD(rnn.parameters(), lr=learning_rate, momentum=momentum)
-
 
 # Train the RNN model
 for epoch in range(num_epochs):
+    total_loss = 0
     for a, b, c in train_set:
+
+        input_tensor = torch.tensor([[int(digit) for digit in a+b]], dtype=torch.float32)
+        target_tensor = torch.tensor([[int(digit) for digit in c]], dtype=torch.float32)
+        
+        '''
+        Model that has issue with batch size mismatch
+
         input_tensor = torch.tensor([int(digit) for digit in (a+b).ljust(input_size, "0")]).float().view(1, -1, input_size)
         target_data = [int(digit) for digit in c.ljust(output_size, "0")]
-        target_tensor = torch.tensor(target_data, dtype=torch.long).view(1, -1)
+        target_tensor = torch.tensor(target_data, dtype=torch.long).view(1, -1)'''
 
         output, loss = train(rnn, input_tensor, target_tensor, criterion, optimizer)
+        total_loss += loss
 
     if epoch % 10 == 0:
-        print(f"Epoch {epoch}: loss = {loss:.4e}")
+        print(f"Epoch {epoch}: loss = {total_loss / len(train_set):.4e}")
 
 # Evaluate the RNN model on the test set
 total_loss = 0
 with torch.no_grad():
     for a, b, c in test_set:
+        # Convert the binary strings to tensors
+        input_tensor = torch.tensor([[int(digit) for digit in a+b]], dtype=torch.float32)
+        target_tensor = torch.tensor([[int(digit) for digit in c]], dtype=torch.float32)
+
+        '''
+        Model that has issue with batch size mismatch
+        
         input_data = [int(digit) for digit in (a+b).ljust(input_size, "0")]
         input_tensor = torch.tensor(input_data, dtype=torch.float32).view(1, -1, input_size)
         target_data = [int(digit) for digit in c.ljust(output_size, "0")]
-        target_tensor = torch.tensor(target_data, dtype=torch.long).view(-1, 1)
-
+        target_tensor = torch.tensor(target_data, dtype=torch.long).view(-1, 1)'''
+        
+        # Initialize the hidden state
         hidden = rnn.initHidden()
 
         '''loss = 0
@@ -162,15 +210,30 @@ with torch.no_grad():
             output_sequence.append(binary_representation)
             loss += criterion(output, target_tensor[i].unsqueeze(0))
         '''
-
+        # Forward pass through the RNN
         output, hidden = rnn(input_tensor, hidden)
-        output_sequence = output.argmax(dim=2).squeeze().tolist()
-        loss = criterion(output.view(-1, output_size), target_tensor)
+
+        # Apply threshold to output probabilities
+        output_sequence = (output >= 0.5).int().squeeze().tolist()
+        
+        '''print(output)
+        print(output_sequence)
+        exit()'''
+        # Compute the loss
+        loss = criterion(output, target_tensor.view(1, 1, -1))
+        total_loss += loss.item()
+
+        '''output_sequence = output.argmax(dim=2).squeeze().tolist()
+        if isinstance(output_sequence, int):  # Add this line
+            output_sequence = [output_sequence]  # Add this line
+        output_sequence = [bin(bit)[2:] for bit in output_sequence]  # Convert to binary'''
+        output_sequence = ''.join(str(bit) for bit in output_sequence)
 
 
         # Print out the test data and the expected and resulting output
         print(f"Test data: {a}, {b}, {c}")
-        print(f"Expected output: {target_tensor.tolist()}")
+        print(f"Expected output: {c}")
+        #print(output)
         print(f"Resulting output: {output_sequence}")
 
         '''output, hidden = rnn(input_tensor, hidden)
