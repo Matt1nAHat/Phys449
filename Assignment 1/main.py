@@ -32,7 +32,8 @@ if __name__ == "__main__":
     parser.add_argument("--train-size", type=int, default=10000, help="size of the generated training set")
     parser.add_argument("--test-size", type=int, default=1000, help="size of the generated test set")
     parser.add_argument("--seed", type=int, default=1234, help="random seed used for creating the datasets")
-    parser.add_argument("--param", help="path to the json file containing the hyperparameters")
+    parser.add_argument("--param", default=".\param\.\param.json", help="path to the json file containing the hyperparameters")
+    parser.add_argument("--save", default="binaryMult.pth", help="path/file name to save the model")
     args = parser.parse_args()
 
     train_set, test_set = generate_dataset(args.train_size, args.test_size, args.seed)
@@ -55,7 +56,9 @@ class RNN(nn.Module):
         self.i2h = nn.Linear(input_size + hidden_size, hidden_size)
         self.i2o = nn.Linear(hidden_size, output_size)
         #self.softmax = nn.LogSoftmax(dim=1)
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size, output_size)
         self.sigmoid = nn.Sigmoid()
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
 
@@ -64,16 +67,13 @@ class RNN(nn.Module):
         input = input.view(1, 1, -1)
         # Forward propagate the RNN
         output, hidden = self.rnn(input, hidden)
-        output = self.fc(output)
-
-        #hidden = self.i2h(combined)
-        #output = self.i2o(hidden)
-
+        output = self.dropout(output)
+        output = self.fc1(output)
+        # Pass the output through the relu activation function
+        output = self.relu(output)
+        output = self.fc2(output)
         # Pass the output through the sigmoid activation function
         output = self.sigmoid(output)
-
-        #output = self.dropout(output)
-        #output = self.softmax(output)
         return output, hidden
 
     def initHidden(self):
@@ -126,6 +126,7 @@ def train(rnn, input_tensor, target_tensor, criterion, optimizer):
     loss.backward()
 
     optimizer.step()
+    #scheduler.step()
 
     return output, loss.item() / input_tensor.size(1)
 
@@ -155,8 +156,10 @@ rnn = RNN(input_size, hidden_size, output_size, num_layers, dropout)
 #criterion = nn.BCEWithLogitsLoss()
 #criterion = nn.NLLLoss()
 criterion = nn.BCELoss()
+#optimizer = optim.Adam(rnn.parameters(), lr=learning_rate, weight_decay=0.01)
 optimizer = optim.SGD(rnn.parameters(), lr=learning_rate, momentum=momentum)
-
+#scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+rnn.train() # Switch to training mode
 # Train the RNN model
 for epoch in range(num_epochs):
     total_loss = 0
@@ -180,6 +183,7 @@ for epoch in range(num_epochs):
 
 # Evaluate the RNN model on the test set
 total_loss = 0
+rnn.eval() # Switch to evaluation mode
 with torch.no_grad():
     for a, b, c in test_set:
         # Convert the binary strings to tensors
@@ -249,3 +253,6 @@ with torch.no_grad():
 
 
 print(f"Test loss: {total_loss / len(test_set):.4f}")
+
+
+torch.save(rnn.state_dict(), args.save)
