@@ -1,14 +1,18 @@
 # Import the necessary libraries
 import matplotlib.pyplot as plt
+import numpy as np
 
 # This function assumes that 'train' returns the loss at each epoch
-def plot_loss(epochs, tLosses, tSwapped_losses, eLosses, eSwapped_losses):
+def plot_loss(epochs, tLosses, eLosses):
 
+    # Convert the lists to numpy arrays
+    tLosses = np.array(tLosses)
+    eLosses = np.array(eLosses)
     # Generate the plot
-    plt.plot(range(epochs), tLosses, label='Training Loss (a*b)')
-    plt.plot(range(epochs), tSwapped_losses, label='Training Loss (b*a)')
-    #plt.plot(range(epochs), eLosses, label='Evaluation Loss (a*b)')
-    #plt.plot(range(epochs), eSwapped_losses, label='Evaluation Loss (b*a)')
+    plt.plot(range(epochs), tLosses[:,0], label='Training Loss (a*b)')
+    plt.plot(range(epochs), tLosses[:,1], label='Training Loss (b*a)')
+    plt.plot(range(epochs), eLosses[:,0], label='Evaluation Loss (a*b)')
+    plt.plot(range(epochs), eLosses[:,1], label='Evaluation Loss (b*a)')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.title('Training Loss Over Time')

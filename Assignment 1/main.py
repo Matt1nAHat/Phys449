@@ -104,14 +104,17 @@ rnn = RNN(input_size, hidden_size, output_size, num_layers, dropout)
 rnn = rnn.to(device)  # Move the model to the GPU if available
 criterion = nn.MSELoss()
 optimizer = optim.SGD(rnn.parameters(), lr=learning_rate, momentum=momentum)
-rnn.train() # Switch to training mode (enables dropout)
 
-# Train the RNN model
 
-# Initialize lists to store the training loss at each epoch
+
+# Initialize lists to store the training and evaluation loss at each epoch
 tLosses = [] 
-tSwapped_losses = []
-for epoch in range(num_epochs):
+eLosses = []
+
+for epoch in range(num_epochs+1):
+
+    # Train the RNN model
+    rnn.train() # Switch to training mode (enables dropout)
 
     #Initialize the total loss for the epoch
     total_loss = 0
@@ -132,28 +135,18 @@ for epoch in range(num_epochs):
         swapped_output, swapped_loss = train(rnn, swapped_input_tensor, target_tensor, criterion, optimizer)
         total_swapped_loss += swapped_loss
     
-    # Store the average loss for the epoch
-    tLosses.append(total_loss / len(train_set))
-    tSwapped_losses.append(total_swapped_loss / len(train_set))
+    # Store the average training loss for the epoch
+    tLosses.append([total_loss / len(train_set),total_swapped_loss / len(train_set)])
 
-    #Print the average loss every 10 epochs \
+    #Print the average loss every 10 epochs 
     if epoch % 10 == 0:
-        print(f"Epoch {epoch}: loss = {total_loss / len(train_set):.4e}, swapped loss = {total_swapped_loss / len(train_set):.4e}")
-        
+        print(f"\033[1mEpoch {epoch}\033[0m:\n\tTrain loss = {total_loss / len(train_set):.4f}\n\tSwapped train loss = {total_swapped_loss / len(train_set):.4f}")
 
 
+    # Evaluate the RNN model on the test set
+    rnn.eval() # Switch to evaluation mode
 
-# Evaluate the RNN model on the test set
-
-
-# Initialize lists to store the evaluation loss at each epoch
-eLosses = []
-eSwapped_losses = []
-
-rnn.eval() # Switch to evaluation mode
-for epoch in range(num_epochs):
-
-    #Initialize the total loss for the epoch
+    #Reset the total loss for the evaluation during current epoch
     total_loss = 0
     total_swapped_loss = 0
 
@@ -186,21 +179,16 @@ for epoch in range(num_epochs):
             output_sequence = ''.join(str(bit) for bit in output_sequence)
             swapped_output_sequence = ''.join(str(bit) for bit in swapped_output_sequence)
 
-            # Print out the test data and the models predicted output
-            #print(f"Test data: {a}, {b}")
-            #print(f"Expected output: {c}")
-            #print(f"Resulting output: {output_sequence}")
-        
-    # Store the average loss for the epoch
-    eLosses.append(total_loss / len(test_set))
-    eSwapped_losses.append(total_swapped_loss / len(test_set))
+    # Store the average training loss for the epoch
+    eLosses.append([total_loss / len(test_set),total_swapped_loss / len(test_set)])
 
+    #Print the average loss every 10 epochs 
+    if epoch % 10 == 0:
+        print(f"\tTest loss = {total_loss / len(test_set):.4f}\n\tSwapped test loss = {total_swapped_loss / len(test_set):.4f}")
 
-# Print the average loss on the test set
-print(f"Test loss: {total_loss / len(test_set):.4f}\nswapped test loss = {total_swapped_loss / len(test_set):.4f}")
 
 # Plot the loss over time after training & evaluation
-plot_loss(num_epochs, tLosses, tSwapped_losses, eLosses, eSwapped_losses)
+plot_loss(num_epochs+1, tLosses, eLosses)
 
 
 #Save the trained model
