@@ -13,8 +13,6 @@ def plot_loss(epochs, losses):
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.title('Training Loss Over Time')
-    plt.legend()
-
     # Save the plot to a file
     plt.savefig('loss_plot.png')
     plt.close()
@@ -23,7 +21,5 @@ def plot_loss(epochs, losses):
     plt.xlabel('Epoch')
     plt.ylabel('KL Divergence')
     plt.title('Training KL Divergence Over Time')
-    plt.legend()
-
     # Save the plot to a file
     plt.savefig('KL_plot.png')

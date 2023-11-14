@@ -21,47 +21,35 @@ if __name__ == "__main__":
 
 # Boltzmann Machine class
 class BoltzmannMachine(nn.Module):
-    def __init__(self, num_visible, num_hidden, batch_size=100, k=1):
+    def __init__(self, num_visible, batch_size=100, gibbs_steps=10):
         super(BoltzmannMachine, self).__init__()
         self.num_visible = num_visible
-        self.num_hidden = num_hidden
         self.batch_size = batch_size
-        self.k = k
+        self.gibbs_steps = gibbs_steps
         
         # Initialize weights and biases
-        self.weights = nn.Parameter(torch.randn(num_hidden, num_visible))
-        self.bias_v = nn.Parameter(torch.zeros(num_visible))
-        self.bias_h = nn.Parameter(torch.zeros(num_hidden))
+        self.weights = nn.Parameter(torch.randn(num_visible, num_visible))
+        self.bias = nn.Parameter(torch.zeros(num_visible))
         
     def forward(self, visible_nodes):
-        prob_hidden, hidden = self.visToHid(visible_nodes)
-        
-        for i in range(self.k):
-            prob_visible, visible = self.hidToVis(hidden)
-            prob_hidden, hidden = self.visToHid(visible)    
-        
+        for _ in range(self.gibbs_steps):
+            prob_visible, visible = self.visToVis(visible_nodes)
         return prob_visible 
 
     def free_energy(self, visible_nodes):
         # Calculate the free energy of the system
-        visible_bias_term = visible_nodes.mv(self.bias_v)
-        wx_b = F.linear(visible_nodes, self.weights, self.bias_h)
-        hidden_term = wx_b.exp().add(1).log().sum(1)
-        #hidden_term = torch.log(1 + torch.exp(wx_b)).sum(1)
-        return (-hidden_term - visible_bias_term).mean()
+        visible_bias_term = visible_nodes.mv(self.bias)
+        wx_b = F.linear(visible_nodes, self.weights, self.bias)
+        visible_term = wx_b.exp().add(1).log().sum(1)
+        return (-visible_term - visible_bias_term).mean()
 
     def sample(self, prob):
         # Sample from a Bernoulli distribution
         #return F.relu(torch.sign(prob - torch.rand_like(prob.size())))
         return torch.distributions.Bernoulli(prob).sample()
 
-    def visToHid(self, visible_nodes):
-        prob_hid = F.sigmoid(F.linear(visible_nodes, self.weights, self.bias_h))
-        sample_hid = self.sample(prob_hid)
-        return prob_hid, sample_hid
-    
-    def hidToVis(self, hidden_nodes):
-        prob_vis = F.sigmoid(F.linear(hidden_nodes, self.weights.t(), self.bias_v))
+    def visToVis(self, visible_nodes):
+        prob_vis = F.sigmoid(F.linear(visible_nodes, self.weights, self.bias))
         sample_vis = self.sample(prob_vis)
         return prob_vis, sample_vis
 
@@ -78,10 +66,17 @@ class BoltzmannMachine(nn.Module):
             # Shuffle the training data
             training_data = training_data[torch.randperm(training_data.size()[0])]
 
+            # Assuming training_data is your data tensor
+            min_val = torch.min(training_data)
+            max_val = torch.max(training_data)
+
+            # Min-Max normalization
+            normalized_training_data = (training_data - min_val) / (max_val - min_val)
+
             # Batch training
-            for i in range(0, training_data.size()[0], self.batch_size):
+            for i in range(0, normalized_training_data.size()[0], self.batch_size):
                 # Get the mini-batch
-                mini_batch = training_data[i:i+self.batch_size]
+                mini_batch = normalized_training_data[i:i+self.batch_size]
 
                 # Perform one step of CD
                 initial_visible_units = mini_batch
@@ -89,28 +84,19 @@ class BoltzmannMachine(nn.Module):
                 visible_units_after_k_steps = self.forward(initial_visible_units)
                 loss = torch.mean(self.free_energy(initial_visible_units)) - torch.mean(self.free_energy(visible_units_after_k_steps))
                 
-                #initial_hidden_probabilities, _ = self.visToHid(initial_visible_units)
-                #hidden_probabilities_after_k_steps, _ = self.visToHid(visible_units_after_k_steps)
-
-                # Compute the loss
-                #loss = torch.mean(self.free_energy(initial_visible_units)) - torch.mean(self.free_energy(visible_units_after_k_steps))
-
                 # Backward pass
                 optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1)
+                #torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1)
                 optimizer.step()
-            
-            
-            
-
-            normalized_training_data = (training_data + 1) / 2
-            #print(self.forward(normalized_training_data))
-            #print(normalized_training_data / self.forward(normalized_training_data))
-            #print(torch.log(normalized_training_data / self.forward(normalized_training_data)))
-            
+                        
             # Compute the KL divergence
-            kl_divergence = torch.sum(normalized_training_data * torch.log(normalized_training_data / self.forward(normalized_training_data) + 1e-5))
+            # Compute the KL divergence
+            model_samples = self.forward(normalized_training_data).detach()
+            model_samples_distribution = torch.histc(model_samples, bins=10, min=0, max=1)
+            training_data_distribution = torch.histc(normalized_training_data, bins=10, min=0, max=1)
+
+            kl_divergence = torch.sum(training_data_distribution * torch.log((training_data_distribution / (model_samples_distribution + 1e-5)) + 1e-5))
 
             # Print the loss for this epoch
             print('Epoch: {}, Loss: {}, KL Divergence: {}'.format(epoch+1, loss, kl_divergence))
