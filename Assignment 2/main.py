@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
 # Boltzmann Machine class
 class BoltzmannMachine(nn.Module):
-    def __init__(self, num_visible, num_hidden, batch_size=10, k=1):
+    def __init__(self, num_visible, num_hidden, batch_size=100, k=1):
         super(BoltzmannMachine, self).__init__()
         self.num_visible = num_visible
         self.num_hidden = num_hidden
@@ -120,10 +120,22 @@ class BoltzmannMachine(nn.Module):
         plot_loss(num_epochs, losses)
         pass
 
-    def predict(self, test_data):
-        v = test_data
-        prob_hid, _ = self.visToHid(v)
-        return self.sample(prob_hid)
+    def predict(self):
+        # Get the weights of the Boltzmann Machine
+        weights = self.weights.detach().numpy()
+        print(weights)
+        # Initialize an empty dictionary to store the coupler values
+        couplers = {}
+
+        # Loop over the weights and add them to the dictionary
+        for i in range(weights.shape[1] - 1):  # Subtract 1 to avoid index out of bounds
+            j = (i + 1) # The index of the next spin in the loop
+            couplers[(i, j)] = weights[i, j]
+
+        # Add the last coupler for the closed loop
+        couplers[(weights.shape[1] - 1, 0)] = weights[weights.shape[1] - 1, 0]
+
+        return couplers
 
 
 
@@ -160,5 +172,5 @@ bm.train(spins, learning_rate, num_epochs)
 
 # Test the BoltzmannMachine
 test_data = spins[:10]  # Use the first 10 samples for testing
-predictions = bm.predict(test_data)
+predictions = bm.predict()
 print(predictions)
