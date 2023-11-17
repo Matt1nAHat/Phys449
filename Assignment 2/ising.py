@@ -1,13 +1,11 @@
 import numpy as np
 
-# Number of spins in each chain
-N = 4
 
 # Number of chains
 num_chains = 1000
 
 # Coupler values
-J = np.array([-1, 1, 1, 1])
+J = np.array([-1, -1, -1, -1, -1, 1])
 
 # Calculate the energy of a configuration
 def energy(configuration, J):
@@ -16,7 +14,7 @@ def energy(configuration, J):
 # Open the file for writing
 with open('./data/inTEST.txt', 'w') as f:
     # Generate all possible spin configurations for this chain
-    configurations = np.array(np.meshgrid(*[[1, -1] for _ in range(N)])).T.reshape(-1,N)
+    configurations = np.array(np.meshgrid(*[[1, -1] for _ in range(J.shape[0])])).T.reshape(-1,J.shape[0])
 
     # Calculate the probabilities of the configurations
     probabilities = np.exp(-np.array([energy(c, J) for c in configurations]))

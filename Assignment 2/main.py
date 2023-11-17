@@ -18,16 +18,18 @@ if __name__ == "__main__":
 
 # Boltzmann Machine class
 class BoltzmannMachine(nn.Module):
-    def __init__(self, num_visible, batch_size=5, gibbs_steps=10):
+    def __init__(self, num_visible, batch_size=50, gibbs_steps=10):
         super(BoltzmannMachine, self).__init__()
         self.num_visible = num_visible
         self.batch_size = batch_size
         self.gibbs_steps = gibbs_steps
         
         # Initialize weights and biases
-        self.weights = nn.Parameter(torch.FloatTensor(num_visible, num_visible).uniform_(-0.05, 0.05))
+        #self.weights = nn.Parameter(torch.FloatTensor(num_visible, num_visible).uniform_(-0.05, 0.05))
         #self.weights.data.fill_diagonal_(0)
         self.bias = nn.Parameter(torch.zeros(num_visible))
+        self.weights = nn.Parameter(torch.FloatTensor(num_visible, num_visible))
+        nn.init.xavier_uniform_(self.weights)  # Xavier initialization
         
     def forward(self, visible_nodes):
         # Perform Gibbs sampling for k steps
@@ -58,22 +60,27 @@ class BoltzmannMachine(nn.Module):
 
         # Initialize the optimizer
         #optimizer = torch.optim.SGD(self.parameters(), lr=learning_rate)
-        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=0.0001)
+        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate, weight_decay=1e-5)
+
+        # Initialize persistent visible units
+        persistent_visible = torch.randn(self.batch_size, self.num_visible)
+
+
+        # Shuffle the training data
+        training_data = training_data[torch.randperm(training_data.size()[0])]
+
+        # Assuming training_data is your data tensor
+        min_val = torch.min(training_data)
+        max_val = torch.max(training_data)
+
+        # Min-Max normalization
+        normalized_training_data = (training_data - min_val) / (max_val - min_val)
+
 
         # Training loop
         for epoch in range(epochs):
             
-            # Shuffle the training data
-            training_data = training_data[torch.randperm(training_data.size()[0])]
-
-            # Assuming training_data is your data tensor
-            min_val = torch.min(training_data)
-            max_val = torch.max(training_data)
-
-            # Min-Max normalization
-            normalized_training_data = (training_data - min_val) / (max_val - min_val)
         
-
             # Batch training
             for i in range(0, normalized_training_data.size()[0], self.batch_size):
                 # Get the mini-batch
@@ -82,20 +89,31 @@ class BoltzmannMachine(nn.Module):
                 # Perform one step of CD
                 initial_visible_units = mini_batch
                 
-                visible_units_after_k_steps = self.forward(initial_visible_units)
-                loss = torch.mean(self.free_energy(initial_visible_units)) - torch.mean(self.free_energy(visible_units_after_k_steps))
+                #visible_units_after_k_steps = self.forward(initial_visible_units)
+                # Forward pass with persistent visible units
+                output = self.forward(persistent_visible)
 
+                loss = torch.mean(self.free_energy(initial_visible_units)) - torch.mean(self.free_energy(output))
+
+                # Add L1 regularization
+                l1_lambda = 0.0001  # Set the L1 regularization rate
+                l1_norm = sum(p.abs().sum() for p in bm.parameters())
+                loss += l1_lambda * l1_norm
+                
                 # Backward pass
                 optimizer.zero_grad()
                 loss.backward()
                 # Clip the gradients
-                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1)
+                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=10)
                 optimizer.step()
 
-                
+                # Update persistent visible units
+                persistent_visible = self.sample(self.forward(persistent_visible))
 
                 # Enforce symmetry
                 self.weights.data = (self.weights.data + self.weights.data.t()) / 2
+                self.weights.data.fill_diagonal_(0)
+
 
                 # Zero the gradients
                 self.weights.grad.data.zero_()
@@ -104,14 +122,18 @@ class BoltzmannMachine(nn.Module):
                         
             # Compute the KL divergence
             model_samples = self.forward(normalized_training_data).detach()
-            model_samples_distribution = torch.histc(model_samples, bins=10, min=0, max=1)
-            training_data_distribution = torch.histc(normalized_training_data, bins=10, min=0, max=1)
+            model_samples_distribution = torch.histc(model_samples, bins=50, min=0, max=1)
+            training_data_distribution = torch.histc(normalized_training_data, bins=50, min=0, max=1)
+
+            # Normalize the histograms
+            model_samples_distribution /= torch.sum(model_samples_distribution)
+            training_data_distribution /= torch.sum(training_data_distribution)
 
             kl_divergence = torch.sum(training_data_distribution * torch.log((training_data_distribution / (model_samples_distribution + 1e-5)) + 1e-5))
 
             # Print the loss for this epoch
             if epoch % 10 == 0:
-                print('Epoch: {}, Loss: {}, KL Divergence: {}'.format(epoch+1, loss, kl_divergence))
+                print(f'Epoch: {epoch}, Loss: {loss:.4f}, KL Divergence: {kl_divergence:.4f}')
 
             losses.append([loss.item(), kl_divergence.item()])
 
@@ -120,8 +142,7 @@ class BoltzmannMachine(nn.Module):
 
     def predict(self):
         # Set the diagonal elements to zero
-        self.weights.data.fill_diagonal_(0)
-        self.weights.data = torch.tanh(self.weights.data)
+        #self.weights.data = torch.tanh(self.weights.data)
         weights = np.sign(self.weights.detach().numpy())
         
         print(weights)
