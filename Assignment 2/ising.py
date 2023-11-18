@@ -1,14 +1,40 @@
 import numpy as np
 
+"""
+This script generates spin configurations for a 1D Ising chain model.
+
+The script first defines the number of chains and the coupler values for the Ising model. 
+It then generates all possible spin configurations for the chain and calculates their probabilities 
+based on their energy.
+
+The script then samples configurations according to these probabilities and writes them to a file. 
+The configurations are written as strings of '+' and '-' characters, representing spin up and spin down, respectively.
+"""
 
 # Number of chains
-num_chains = 1000
+num_chains = 5000
 
 # Coupler values
-J = np.array([-1, -1, -1, -1, -1, 1])
+J = np.array([1, -1, 1, -1, 1, 1, -1])
 
-# Calculate the energy of a configuration
 def energy(configuration, J):
+    """
+    Calculate the energy of a given configuration in the 1D Ising model.
+
+    The energy is calculated as the negative sum of the product of the coupler values 
+    and the spins in the configuration.
+
+    Run the script by just using ising.py in the terminal
+
+    Args:
+        configuration (numpy.ndarray): The spin configuration. It should be a 1D array 
+            of 1s and -1s, where 1 represents spin up and -1 represents spin down.
+        J (numpy.ndarray): The coupler values for the Ising model. It should be a 1D array 
+            of the same length as the configuration.
+    Returns:
+        float: The energy of the configuration.
+    """
+    
     return -np.sum(J[:-1] * configuration[:-1] * configuration[1:])
 
 # Open the file for writing
