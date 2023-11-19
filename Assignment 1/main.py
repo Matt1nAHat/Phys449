@@ -6,10 +6,10 @@ import torch.optim as optim
 import json
 from datasetGenerator import generate_dataset
 from plot import plot_loss
+from RNN import model
 
 # Check if a GPU is available and if not, use a CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 #Parser for command-line options, arguments and sub-commands
 if __name__ == "__main__":
@@ -18,49 +18,46 @@ if __name__ == "__main__":
     parser.add_argument("--test-size", type=int, default=1000, help="size of the generated test set")
     parser.add_argument("--seed", type=int, default=1234, help="random seed used for creating the datasets")
     parser.add_argument("--param", default=".\param\.\param.json", help="path to the json file containing the hyperparameters")
-    parser.add_argument("--save", default="binaryMult.pth", help="path/file name to save the model")
+    parser.add_argument("--save", default=".\\results\.\\binaryMult.pth", help="path/file name to save the model")
     #Add arguments to the parser
     args = parser.parse_args()
 
- 
-# Define the RNN model
-class RNN(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_layers, dropout):
-        super(RNN, self).__init__()
-        # Define the model parameters
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.dropout = nn.Dropout(dropout)
-        #Define the activation functions
-        self.relu = nn.ReLU()
-        # Adding fully connected layer
-        self.fc1 = nn.Linear(hidden_size, hidden_size)  
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, output_size)  
-        # Define the RNN layer
-        self.rnn = nn.RNN(input_size, hidden_size, num_layers, dropout=dropout, batch_first=True)
+# Generate the dataset
+train_set, test_set = generate_dataset(train_size=args.train_size, test_size=args.test_size, seed=args.seed)
 
-    def forward(self, input, hidden):
-        # Reshape the input to (batch_size, sequence_length, input_size)
-        input = input.view(1, 1, -1)
-        # Forward propagate the RNN
-        output, hidden = self.rnn(input, hidden)
-        output = self.dropout(output)
-        output = self.fc1(output)
-        # Pass the output through activation functions and fully connected layers
-        output = self.relu(output)
-        output = self.fc2(output)
-        output = self.relu(output)
-        output = self.fc3(output)
-        output = self.relu(output)
-        return output, hidden
+# Load Hyperparameters from json file
+with open(args.param, "r") as f:
+    hyperparams = json.load(f)
 
-    def initHidden(self):
-        # Initialize the hidden state to zeros
-        return torch.zeros(self.num_layers, 1, self.hidden_size)
+# Access the hyperparameters for the optimization algorithm
+learning_rate = hyperparams["optim"]["lr"]
+momentum = hyperparams["optim"]["momentum"]
 
-#Function to train the RNN Model
+# Access the hyperparameters for the model
+input_size = hyperparams["model"]["input_size"]
+hidden_size = hyperparams["model"]["hidden_size"]
+output_size = hyperparams["model"]["output_size"]
+num_layers = hyperparams["model"]["num_layers"]
+dropout = hyperparams["model"]["dropout"]
+num_epochs = hyperparams["model"]["num_epochs"]
+
 def train(rnn, input_tensor, target_tensor, criterion, optimizer):
+    """
+    Trains the RNN model for one epoch.
+    This function initializes the hidden state, clears the gradients, and initializes the loss to zero. 
+    It then performs a forward pass through the RNN for each character in the input string, accumulates the loss, backpropagates the loss, and updates the weights.
+
+    Args:
+        rnn (nn.Module): The RNN model.
+        input_tensor (torch.Tensor): The input data for the model.
+        target_tensor (torch.Tensor): The target data for the model.
+        criterion (nn.Module): The loss function.
+        optimizer (torch.optim.Optimizer): The optimizer.
+
+    Returns:
+        output (torch.Tensor): The output from the model.
+        loss.item() (float): The loss value.
+    """
     # Initialize the hidden state
     hidden = rnn.initHidden().to(device)
     # Clear the gradients
@@ -79,41 +76,20 @@ def train(rnn, input_tensor, target_tensor, criterion, optimizer):
 
     return output, loss.item()
 
-# Generate the dataset
-train_set, test_set = generate_dataset(train_size=1000, test_size=100, seed=1234)
-
-# Load Hyperparameters from json file
-with open(args.param, "r") as f:
-    hyperparams = json.load(f)
-
-# Access the hyperparameters for the optimization algorithm
-learning_rate = hyperparams["optim"]["lr"]
-momentum = hyperparams["optim"]["momentum"]
-
-# Access the hyperparameters for the model
-input_size = hyperparams["model"]["input_size"]
-hidden_size = hyperparams["model"]["hidden_size"]
-output_size = hyperparams["model"]["output_size"]
-num_layers = hyperparams["model"]["num_layers"]
-dropout = hyperparams["model"]["dropout"]
-num_epochs = hyperparams["model"]["num_epochs"]
-
-
 # Initialize the RNN model, loss function, and optimizer
-rnn = RNN(input_size, hidden_size, output_size, num_layers, dropout)
+rnn = model(input_size, hidden_size, output_size, num_layers, dropout)
 rnn = rnn.to(device)  # Move the model to the GPU if available
 criterion = nn.MSELoss()
 optimizer = optim.SGD(rnn.parameters(), lr=learning_rate, momentum=momentum)
-
-
 
 # Initialize lists to store the training and evaluation loss at each epoch
 tLosses = [] 
 eLosses = []
 
+# Train and evaluate the RNN model for num_epochs epochs
 for epoch in range(num_epochs+1):
 
-    # Train the RNN model
+    '''Train the RNN model'''
     rnn.train() # Switch to training mode (enables dropout)
 
     #Initialize the total loss for the epoch
@@ -143,13 +119,15 @@ for epoch in range(num_epochs+1):
         print(f"\033[1mEpoch {epoch}\033[0m:\n\tTrain loss = {total_loss / len(train_set):.4f}\n\tSwapped train loss = {total_swapped_loss / len(train_set):.4f}")
 
 
-    # Evaluate the RNN model on the test set
+    '''Evaluate the RNN model on the test set'''
     rnn.eval() # Switch to evaluation mode
 
     #Reset the total loss for the evaluation during current epoch
     total_loss = 0
     total_swapped_loss = 0
+    correct = 0 
 
+    #loop over the test set disabling gradient computation
     with torch.no_grad():
         for a, b, c in test_set:
             # Convert the binary strings to tensors
@@ -186,10 +164,8 @@ for epoch in range(num_epochs+1):
     if epoch % 10 == 0:
         print(f"\tTest loss = {total_loss / len(test_set):.4f}\n\tSwapped test loss = {total_swapped_loss / len(test_set):.4f}")
 
-
 # Plot the loss over time after training & evaluation
 plot_loss(num_epochs+1, tLosses, eLosses)
-
 
 #Save the trained model
 torch.save(rnn.state_dict(), args.save)
