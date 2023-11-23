@@ -1,32 +1,32 @@
 import torch
 import matplotlib.pyplot as plt
-import argparse
-from torchvision.utils import make_grid
 from VAE import VAEModel
 
-# Parse command line arguments
-parser = argparse.ArgumentParser(description='Generate digit samples')
-parser.add_argument('-n', type=int, default=100, help='Number of samples to generate')
-parser.add_argument("--path", default=".\\results\.\\mnistVAE.pth", help="path/file name to load the model from")
-args = parser.parse_args()
-
 def test(modelPath, n, output_dir='.\\results\.'):
+    """
+    Generate and save reconstructed samples using a trained VAE model.
+
+    Args:
+    - modelPath (str): Path to the saved state dictionary of the trained VAE model.
+    - n (int): Number of samples to generate and save.
+    - output_dir (str, optional): Directory to save the generated samples as PDF files. Default is '.\\results\\'.
+
+    Returns:
+    N sample images saved as PDFs in the output directory.
+    """
     # Load the trained model
     testModel = VAEModel()
     testModel.load_state_dict(torch.load(modelPath))
-    testModel.eval()
+    testModel.eval() # Set the model to evaluation mode
 
     # Generate n samples
-    z = torch.randn((n, 20))  # Replace model.latent_dim with the size of your model's latent space
+    z = torch.randn((n, 20))  
     samples = testModel.decode(z)
 
     # Convert each sample to an image and save it as a PDF file
-    for i in range(args.n):
+    for i in range(n):
         sample = samples[i].detach().cpu().numpy()
-        sample = sample.squeeze()
+        sample = sample.squeeze() # Remove the channel dimension to get a 2D image
         plt.imshow(sample, cmap='gray')
         plt.axis('off')
         plt.savefig(f'{output_dir}\\{i+1}.pdf', format='pdf')
-
-        
-test(args.path, args.n)

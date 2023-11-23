@@ -1,9 +1,9 @@
 {
     "optim": {
-        "lr": 0.005
+        "lr": 0.001
     },
     "model": {
-        "num_epochs": 50,
+        "num_epochs": 100,
         "batch_size": 100
     }
 }
