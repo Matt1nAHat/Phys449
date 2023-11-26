@@ -10,7 +10,7 @@ import os
 
 #Parser for command-line options, arguments and sub-commands
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Assignment 2: Trains a Boltzmann machine on data from a 1-D classical Ising chain to predict coupler values")
+    parser = argparse.ArgumentParser(description="Assignment 3: Trains a VAE on MNIST data and generates even numbered samples from the trained model.")
     parser.add_argument("--param", default=".\param\.\param.json", help="path to the json file containing the hyperparameters")
     parser.add_argument("--data", default=".\data\.\even_mnist.csv", help="path to the json file containing the hyperparameters")
     parser.add_argument("--save", default=".\\results\.\\mnistVAE.pth", help="path/file name to save the model")

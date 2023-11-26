@@ -1,6 +1,5 @@
 # Import the necessary libraries
 import matplotlib.pyplot as plt
-import numpy as np
 
 # This function assumes that 'train' returns the loss at each epoch
 def plot_loss(epochs, losses, output_dir):
