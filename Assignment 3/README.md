@@ -7,7 +7,7 @@ The task is to learn to write even numbers from 0 to 8. The model is trained on 
 
 The model architecture consists of a VAE with convolutional units in the encoder. The model is trained using a loss function that combines a reconstruction loss and a KL-divergence loss, and an Adam optimizer.
 
-The loss at each epoch is recorded and a plot of the training loss over time is generated and saved to a file (unless verbose mode is set to false). 
+The loss at each epoch is recorded and a plot of the training loss over time is generated and saved to a file. 
 
 The trained model parameters are saved.
 
